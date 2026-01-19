@@ -1,0 +1,122 @@
+# Cloud Run service configuration for Character Screening API
+# To deploy: gcloud run services replace character-screening-service.yaml
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: character-screening-api
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # CPU and memory allocation
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/memory: "2Gi"
+        run.googleapis.com/cpu: "1"
+        
+        # Scaling configuration for character screening workloads
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "20"
+        
+    spec:
+      # Service account for GCP permissions
+      serviceAccountName: 369455734154-compute@developer.gserviceaccount.com
+      
+      # Timeout for character screening requests (max 5 minutes)
+      timeoutSeconds: 300
+      
+      containers:
+      - image: asia-southeast2-docker.pkg.dev/bni-prod-dma-bnimove-ai/cloud-run-source-deploy/character-screening-api:latest
+        
+        ports:
+        - containerPort: 8080
+          name: http1
+        
+        # Environment variables
+        env:
+        # Google Cloud Configuration
+        - name: GOOGLE_CLOUD_PROJECT
+          value: "bni-prod-dma-bnimove-ai"
+        - name: GCS_BUCKET_NAME
+          value: "character-screening-storage-bucket"
+        - name: PUBSUB_TOPIC
+          value: "character-screening-processing"
+        - name: FIRESTORE_DATABASE
+          value: "character-screening-firestore"
+        - name: PORT
+          value: "8080"
+        
+        # Character Screening Model Configuration
+        - name: OPENWEBUI_BASE_URL
+          value: "https://nexus-bnimove-369455734154.asia-southeast2.run.app"
+        - name: OPENWEBUI_API_KEY
+          value: "sk-c2ebcb8d36aa4361a28560915d8ab6f2"
+        - name: TEXT_MODEL_TIMEOUT_SECONDS
+          value: "45"
+        - name: TEXT_MODEL_RETRY_ATTEMPTS
+          value: "3"
+        
+        # Authentication and Security Configuration
+        - name: REQUIRE_AUTH
+          value: "true"
+        - name: API_KEYS
+          value: "cs-api-key-production,cs-api-key-staging"
+        - name: AUDIT_SENSITIVE_OPERATIONS
+          value: "true"
+        - name: RATE_LIMIT_REQUESTS
+          value: "500"
+        - name: RATE_LIMIT_WINDOW
+          value: "3600"
+        - name: RATE_LIMIT_BURST
+          value: "50"
+        
+        # Monitoring and Observability
+        - name: ENABLE_METRICS
+          value: "true"
+        - name: LOG_LEVEL
+          value: "INFO"
+        
+        # Character Screening Specific Configuration
+        - name: ENABLE_COMPREHENSIVE_SCREENING
+          value: "true"
+        - name: DEFAULT_JURISDICTION
+          value: "ID"
+        - name: ENABLE_RISK_SCORING
+          value: "true"
+        - name: ENABLE_AUDIT_LOGGING
+          value: "true"
+        
+        # Resource limits optimized for character screening
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+  
+  traffic:
+  - percent: 100
+    latestRevision: true
